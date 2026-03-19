@@ -14,9 +14,6 @@ load_dotenv()
 
 TOKEN = os.getenv("TOKEN")
 
-intents = discord.Intents.default()
-intents.message_content = True
-
 class Proto1Bot(commands.Bot):
     client: aiohttp.ClientSession
     _uptime: datetime.datetime = datetime.datetime.now(datetime.UTC)
@@ -25,27 +22,35 @@ class Proto1Bot(commands.Bot):
         intents = discord.Intents.default()
         intents.members = True
         intents.message_content = True
-        super().__init__(*args, **kwargs, command_prefix=commands.when_mentioned_or(prefix), intents=intents)
+        super().__init__(
+            command_prefix=commands.when_mentioned_or(prefix),
+            intents=intents,
+            application_id=int(os.getenv("APPLICATION_ID"))
+        )
         self.logger = logging.getLogger(self.__class__.__name__)
         self.ext_dir = ext_dir
-        self.synced = False
 
     async def _load_extensions(self) -> None:
         await command_loader.load_extensions(self)
 
+
     async def on_error(self, event_method: str, *args: typing.Any, **kwargs: typing.Any) -> None:
         self.logger.error(f"An error occurred in {event_method}.\n{traceback.format_exc()}")
 
+
     async def on_ready(self) -> None:
-        self.logger.info(f"Logged in as {self.user} ({self.user.id})")
+        self.logger.info(f"Logged in as {self.user} [{self.application_id}]")
 
     async def setup_hook(self) -> None:
         self.client = aiohttp.ClientSession()
         await self._load_extensions()
-        if not self.synced:
-            await self.tree.sync()
-            self.synced = not self.synced
-            self.logger.info("Synced command tree")
+        
+        try:
+            synced = await self.tree.sync()
+            self.logger.info(f"Synced {len(synced)} commands")
+        except Exception as e:
+            self.logger.error(f"Error syncing commands: {e}")
+
 
     async def close(self) -> None:
         await super().close()
@@ -71,7 +76,7 @@ class Proto1Bot(commands.Bot):
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s: %(message)s")
-    bot = Proto1Bot(prefix="!", ext_dir="modules")
+    bot = Proto1Bot(prefix="!", ext_dir=os.path.join(os.path.dirname(__file__), "modules"))
     
     bot.run()
 
